@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kineroom — Análisis Biomecánico Clínico de Tren Inferior</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- MediaPipe Pose -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <!-- jsPDF para generación nativa de PDF descargable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0b1120;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    
+    .pulse-rec {
+      animation: pulseRec 1.4s infinite;
+    }
+    @keyframes pulseRec {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.15); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-white">Kineroom</h1>
+            <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30 rounded-full">
+              Tamizaje Clínico
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Evaluación Cinemática de Tren Inferior · Plano Sagital</p>
+        </div>
+      </div>
+
+      <!-- Selector de Lado Evaluado y Acciones Rápidas -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div class="flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700">
+          <span class="text-[11px] text-slate-400 px-2 hidden md:inline">Hemicuerpo:</span>
+          <button id="btnSideRight" onclick="setEvaluatedSide('right')" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-teal-600 text-white transition">
+            Derecho
+          </button>
+          <button id="btnSideLeft" onclick="setEvaluatedSide('left')" class="px-2.5 py-1 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition">
+            Izquierdo
+          </button>
+        </div>
+
+        <button onclick="openReportModal()" class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition">
+          <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="hidden sm:inline">Informe</span>
+        </button>
+
+        <button onclick="exportPDF()" class="flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-rose-600/20 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span>PDF</span>
+        </button>
+
+        <button onclick="exportCSV()" class="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-teal-600/20 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span>CSV</span>
+        </button>
+
+        <button onclick="openShareQR()" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition">
+          <span>QR</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- COLUMNA IZQUIERDA: VISOR DE VIDEO / CÁMARA + CONTROLES FOTOGRAMA A FOTOGRAMA (7 cols) -->
+    <div class="lg:col-span-7 flex flex-col gap-3">
+
+      <!-- Barra de Fuente de Video (Subir Video o Cámara en Vivo) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Subir Video -->
+          <label class="cursor-pointer flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Subir Video</span>
+            <input type="file" id="videoUploadInput" accept="video/*" class="hidden" onchange="handleVideoUpload(event)" />
+          </label>
+
+          <!-- Cámara Trasera -->
+          <button onclick="startCamera('environment')" class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>Cámara Trasera</span>
+          </button>
+
+          <!-- Cámara Frontal -->
+          <button onclick="startCamera('user')" class="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Cámara Frontal</span>
+          </button>
+        </div>
+
+        <!-- Botón de Grabación en Vivo (visible al usar cámara) -->
+        <div id="recordingControls" class="hidden items-center gap-2">
+          <button id="btnRecordToggle" onclick="toggleRecording()" class="flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition">
+            <span id="recDot" class="w-2.5 h-2.5 rounded-full bg-white"></span>
+            <span id="recText">Grabar Sesión</span>
+          </button>
+          <button onclick="stopCamera()" class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700">
+            Detener
+          </button>
+        </div>
+      </div>
+
+      <!-- VISOR CANVAS + VIDEO -->
+      <div class="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
+        <video id="inputVideo" class="hidden" playsinline muted></video>
+        <canvas id="outputCanvas" class="w-full h-full object-contain"></canvas>
+
+        <!-- Pantalla de Bienvenida / Estado Inicial -->
+        <div id="emptyStateOverlay" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900/95">
+          <div class="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mb-4">
+            <svg class="w-8 h-8 text-teal-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 class="text-base sm:text-lg font-bold text-white mb-1">Listo para Evaluación Cinemática</h2>
+          <p class="text-xs sm:text-sm text-slate-400 max-w-md mb-4">
+            Sube un video de marcha en vista lateral (plano sagital) o activa la cámara trasera/frontal de tu dispositivo para rastrear <strong class="text-slate-200">Acromion, Cadera, Cóndilo Lateral, Tobillo y Pie</strong>.
+          </p>
+          <div class="flex flex-wrap justify-center gap-2 text-[11px] text-slate-400">
+            <span class="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700">✓ Detección Automática MediaPipe Pose</span>
+            <span class="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700">✓ Avance Fotograma a Fotograma</span>
+          </div>
+        </div>
+
+        <!-- Indicador de Carga del Modelo IA -->
+        <div id="modelLoadingBadge" class="hidden absolute top-3 left-3 bg-slate-900/90 backdrop-blur border border-teal-500/40 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs text-teal-300">
+          <svg class="animate-spin h-4 w-4 text-teal-400" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+          <span>Cargando modelo biomecánico de alta precisión...</span>
+        </div>
+
+        <!-- Alerta de Plano Sagital / Calidad de Captura -->
+        <div id="sagittalWarning" class="hidden absolute top-3 right-3 bg-amber-950/90 border border-amber-500/50 px-3 py-1.5 rounded-lg text-[11px] text-amber-200 flex items-center gap-1.5">
+          <span>⚠️</span>
+          <span>Posiciona al paciente estrictamente de perfil para máxima precisión angular</span>
+        </div>
+
+        <!-- HUD Flotante de Fotograma Actual -->
+        <div id="hudOverlay" class="hidden absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+          <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 px-3 py-1.5 rounded-lg text-[11px] font-mono-num text-slate-300">
+            Frame: <span id="hudFrameNum" class="text-white font-bold">0</span> | Tiempo: <span id="hudTime" class="text-teal-400">0.00s</span>
+          </div>
+          <div id="hudTrafficLightBadge" class="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg border bg-slate-900/90 border-slate-700 text-slate-300">
+            Esperando lectura...
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTROLES DE REPRODUCCIÓN Y FOTOGRAMA A FOTOGRAMA -->
+      <div id="videoPlaybackControls" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5">
+        <div class="flex items-center gap-3">
+          <span id="currentTimeLabel" class="text-xs font-mono-num text-slate-400 w-12">00:00</span>
+          <input type="range" id="videoScrubber" min="0" max="100" step="0.01" value="0" oninput="scrubVideo(this.value)" class="flex-1 accent-teal-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+          <span id="durationLabel" class="text-xs font-mono-num text-slate-400 w-12 text-right">00:00</span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <button onclick="stepFrame(-1)" title="Fotograma Anterior" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1 transition">
+              <span>⏮</span>
+              <span>-1 Frame</span>
+            </button>
+
+            <button id="btnPlayPause" onclick="togglePlayPause()" class="px-4 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5">
+              <span id="playPauseIcon">▶</span>
+              <span id="playPauseText">Reproducir</span>
+            </button>
+
+            <button onclick="stepFrame(1)" title="Fotograma Siguiente" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1 transition">
+              <span>+1 Frame</span>
+              <span>⏭</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-400">Velocidad:</span>
+            <select id="playbackSpeed" onchange="changePlaybackSpeed(this.value)" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
+              <option value="0.1">0.1x (Ultra Lento)</option>
+              <option value="0.25" selected>0.25x (Clínico)</option>
+              <option value="0.5">0.5x</option>
+              <option value="1">1.0x (Normal)</option>
+            </select>
+
+            <button onclick="resetMetrics()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700" title="Reiniciar registros de sesión">
+              Limpiar Métricas
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LEYENDA DE PUNTOS ANATÓMICOS RASTREADOS -->
+      <div class="bg-slate-900/70 border border-slate-800/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span class="font-semibold text-slate-300">Puntos Anatómicos Activos:</span>
+        <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span>Acromion</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-teal-400 inline-block"></span>Cadera (Trocánter)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>Cóndilo Lateral</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block"></span>Tobillo (Maléolo)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block"></span>Calcáneo y 5° MTT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLUMNA DERECHA: SEMÁFORO BIOMECÁNICO, ÁNGULOS Y ALERTAS DE REVISIÓN (5 cols) -->
+    <div class="lg:col-span-5 flex flex-col gap-3">
+
+      <!-- SEMÁFORO GLOBAL DE MOVIMIENTO FUNCIONAL -->
+      <div id="globalTrafficCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 transition-all duration-300">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-sm font-bold text-white uppercase tracking-wider">Semáforo Funcional en Vivo</h2>
+            <p class="text-xs text-slate-400">Evaluación instantánea de flexión y extensión</p>
+          </div>
+          <div class="flex items-center gap-2 bg-slate-950 px-3 py-2 rounded-full border border-slate-800">
+            <div id="lightRed" class="w-4 h-4 rounded-full bg-rose-950 border border-rose-800 transition-all duration-200"></div>
+            <div id="lightYellow" class="w-4 h-4 rounded-full bg-amber-950 border border-amber-800 transition-all duration-200"></div>
+            <div id="lightGreen" class="w-4 h-4 rounded-full bg-emerald-950 border border-emerald-800 transition-all duration-200"></div>
+          </div>
+        </div>
+        <div id="trafficStatusText" class="text-xs bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-slate-300">
+          Inicia un video o cámara para evaluar el cumplimiento de los rangos funcionales en tiempo real.
+        </div>
+      </div>
+
+      <!-- TARJETAS DE ÁNGULOS ARTICULARES (CADERA, RODILLA, TOBILLO) -->
+      <div class="grid grid-cols-1 gap-2.5">
+
+        <!-- 1. CADERA -->
+        <div id="cardHip" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 transition-colors">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span id="dotHip" class="w-3 h-3 rounded-full bg-slate-600"></span>
+              <h3 class="text-sm font-bold text-white">Cadera <span class="text-xs font-normal text-slate-400">(Acromion–Cadera–Cóndilo)</span></h3>
+            </div>
+            <span id="badgeHip" class="px-2 py-0.5 text-[11px] font-bold rounded bg-slate-800 text-slate-400">--</span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <div>
+              <span id="valHip" class="text-2xl font-extrabold font-mono-num text-white">--°</span>
+              <span id="phaseHip" class="text-xs font-semibold text-slate-400 ml-1.5">Neutro</span>
+            </div>
+            <div class="text-right text-[11px] font-mono-num text-slate-400">
+              <div>Máx Flex: <strong id="maxHipFlex" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≥30°)</span></div>
+              <div>Máx Ext: <strong id="maxHipExt" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≥10°)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. RODILLA -->
+        <div id="cardKnee" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 transition-colors">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span id="dotKnee" class="w-3 h-3 rounded-full bg-slate-600"></span>
+              <h3 class="text-sm font-bold text-white">Rodilla <span class="text-xs font-normal text-slate-400">(Cadera–Cóndilo–Tobillo)</span></h3>
+            </div>
+            <span id="badgeKnee" class="px-2 py-0.5 text-[11px] font-bold rounded bg-slate-800 text-slate-400">--</span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <div>
+              <span id="valKnee" class="text-2xl font-extrabold font-mono-num text-white">--°</span>
+              <span id="phaseKnee" class="text-xs font-semibold text-slate-400 ml-1.5">Neutro (0°=Ext)</span>
+            </div>
+            <div class="text-right text-[11px] font-mono-num text-slate-400">
+              <div>Máx Flex: <strong id="maxKneeFlex" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≥60°)</span></div>
+              <div>Extensión: <strong id="minKneeExt" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≤5°)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. TOBILLO -->
+        <div id="cardAnkle" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 transition-colors">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span id="dotAnkle" class="w-3 h-3 rounded-full bg-slate-600"></span>
+              <h3 class="text-sm font-bold text-white">Tobillo <span class="text-xs font-normal text-slate-400">(Dorsi + / Plantiflexión -)</span></h3>
+            </div>
+            <span id="badgeAnkle" class="px-2 py-0.5 text-[11px] font-bold rounded bg-slate-800 text-slate-400">--</span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <div>
+              <span id="valAnkle" class="text-2xl font-extrabold font-mono-num text-white">--°</span>
+              <span id="phaseAnkle" class="text-xs font-semibold text-slate-400 ml-1.5">Neutro (0°)</span>
+            </div>
+            <div class="text-right text-[11px] font-mono-num text-slate-400">
+              <div>Dorsiflexión: <strong id="maxAnkleDorsi" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≥10°)</span></div>
+              <div>Plantiflexión: <strong id="maxAnklePlantar" class="text-slate-200">--°</strong> <span class="text-slate-500">(Obj ≥20°)</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- PANEL DE ALERTAS DE REVISIÓN BIOMECÁNICA PARA EL KINESIÓLOGO -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-300">Alertas de Revisión Biomecánica</h3>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Foco de Exploración</span>
+        </div>
+
+        <div id="clinicalAlertsList" class="space-y-2 text-xs text-slate-300 flex-1 overflow-y-auto max-h-64 pr-1">
+          <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-slate-400">
+            Al analizar la marcha, el sistema levantará alertas sobre las estructuras que conviene revisar en camilla (tensión muscular, movilidad capsular o control motor), sin emitir diagnósticos médicos.
+          </div>
+        </div>
+
+        <p class="mt-3 pt-2 border-t border-slate-800/80 text-[10px] text-slate-500 leading-relaxed">
+          * Estas alertas no constituyen un diagnóstico. Son indicadores preliminares para guiar la exploración física y el razonamiento clínico del kinesiólogo tratante.
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL DE INFORME CLÍNICO -->
+  <div id="reportModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-white">Informe de Evaluación Cinemática — Kineroom</h2>
+          <p class="text-xs text-slate-400">Hemicuerpo evaluado: <span id="reportSideLabel" class="text-teal-400 font-semibold">Derecho</span></p>
+        </div>
+        <button onclick="closeReportModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <!-- Campo opcional para identificación del paciente / sesión -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">Identificador Paciente / Código (Opcional)</label>
+          <input type="text" id="patientIdInput" placeholder="Ej: PAC-014 o Iniciales" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500" />
+        </div>
+        <div>
+          <label class="block text-[11px] text-slate-400 mb-1">Kinesiólogo Evaluador (Opcional)</label>
+          <input type="text" id="evaluatorNameInput" placeholder="Nombre del profesional" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500" />
+        </div>
+      </div>
+
+      <div id="reportContent" class="overflow-y-auto space-y-4 text-xs text-slate-300 flex-1 pr-1"></div>
+
+      <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap justify-end gap-2">
+        <button onclick="exportPDF()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5">
+          <span>📄 Descargar Informe PDF</span>
+        </button>
+        <button onclick="exportCSV()" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg">
+          Descargar Datos (CSV)
+        </button>
+        <button onclick="closeReportModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CÓDIGO QR PARA COMPARTIR -->
+  <div id="qrModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+      <h3 class="text-lg font-bold text-white mb-1">Compartir Kineroom</h3>
+      <p class="text-xs text-slate-400 mb-4">Escanea este código con la cámara de cualquier celular para abrir la evaluación en vivo (requiere que el archivo esté alojado en web/HTTPS).</p>
+      <div class="bg-white p-3 rounded-xl inline-block mb-4">
+        <img id="qrImage" src="" alt="Código QR Kineroom" class="w-48 h-48 mx-auto" />
+      </div>
+      <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg p-2 mb-4">
+        <input id="shareUrlInput" type="text" readonly class="bg-transparent text-xs text-slate-300 w-full focus:outline-none" />
+        <button onclick="copyShareLink()" class="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded">Copiar</button>
+      </div>
+      <button onclick="document.getElementById('qrModal').classList.add('hidden')" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg">
+        Cerrar
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let evaluatedSide = 'right';
+    let pose = null;
+    let isModelReady = false;
+    let mode = 'idle';
+    let cameraStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let animationFrameId = null;
+    let frameCounter = 0;
+
+    const SMOOTHING_ALPHA = 0.45;
+    let smoothedLandmarks = null;
+
+    let sessionStats = {
+      hipMaxFlex: null,
+      hipMaxExt: null,
+      kneeMaxFlex: null,
+      kneeMinExt: null,
+      ankleMaxDorsi: null,
+      ankleMaxPlantar: null,
+      history: [],
+      alerts: []
+    };
+
+    const videoEl = document.getElementById('inputVideo');
+    const canvasEl = document.getElementById('outputCanvas');
+    const ctx = canvasEl.getContext('2d');
+
+    async function initPoseModel() {
+      if (pose) return;
+      document.getElementById('modelLoadingBadge').classList.remove('hidden');
+
+      pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      });
+
+      pose.setOptions({
+        modelComplexity: 2,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+
+      pose.onResults(onPoseResults);
+      await pose.initialize();
+      isModelReady = true;
+      document.getElementById('modelLoadingBadge').classList.add('hidden');
+    }
+
+    function setEvaluatedSide(side) {
+      evaluatedSide = side;
+      document.getElementById('btnSideRight').className = side === 'right'
+        ? 'px-2.5 py-1 text-xs font-semibold rounded-md bg-teal-600 text-white transition'
+        : 'px-2.5 py-1 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition';
+      document.getElementById('btnSideLeft').className = side === 'left'
+        ? 'px-2.5 py-1 text-xs font-semibold rounded-md bg-teal-600 text-white transition'
+        : 'px-2.5 py-1 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition';
+
+      resetMetrics();
+      if (mode === 'video' && videoEl.paused && videoEl.src) {
+        processSingleFrame();
+      }
+    }
+
+    async function handleVideoUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      stopCamera();
+      await initPoseModel();
+
+      const fileURL = URL.createObjectURL(file);
+      mode = 'video';
+      videoEl.srcObject = null;
+      videoEl.src = fileURL;
+      videoEl.playbackRate = parseFloat(document.getElementById('playbackSpeed').value);
+
+      document.getElementById('emptyStateOverlay').classList.add('hidden');
+      document.getElementById('hudOverlay').classList.remove('hidden');
+      document.getElementById('videoPlaybackControls').classList.remove('hidden');
+      document.getElementById('recordingControls').classList.add('hidden');
+
+      resetMetrics();
+
+      videoEl.onloadedmetadata = () => {
+        canvasEl.width = videoEl.videoWidth || 1280;
+        canvasEl.height = videoEl.videoHeight || 720;
+        document.getElementById('videoScrubber').max = videoEl.duration;
+        document.getElementById('durationLabel').textContent = formatTime(videoEl.duration);
+        videoEl.currentTime = 0;
+      };
+
+      videoEl.onseeked = async () => {
+        updateTimeUI();
+        await processSingleFrame();
+      };
+
+      videoEl.onended = () => {
+        updatePlayPauseUI(false);
+      };
+    }
+
+    function togglePlayPause() {
+      if (mode !== 'video') return;
+      if (videoEl.paused) {
+        videoEl.play();
+        updatePlayPauseUI(true);
+        processVideoLoop();
+      } else {
+        videoEl.pause();
+        updatePlayPauseUI(false);
+      }
+    }
+
+    function updatePlayPauseUI(isPlaying) {
+      document.getElementById('playPauseIcon').textContent = isPlaying ? '⏸' : '▶';
+      document.getElementById('playPauseText').textContent = isPlaying ? 'Pausar' : 'Reproducir';
+    }
+
+    function stepFrame(direction) {
+      if (mode !== 'video' || !videoEl.src) return;
+      if (!videoEl.paused) {
+        videoEl.pause();
+        updatePlayPauseUI(false);
+      }
+      const frameStep = 1 / 30;
+      const targetTime = Math.min(Math.max(0, videoEl.currentTime + direction * frameStep), videoEl.duration);
+      videoEl.currentTime = targetTime;
+    }
+
+    function scrubVideo(val) {
+      if (mode !== 'video') return;
+      if (!videoEl.paused) {
+        videoEl.pause();
+        updatePlayPauseUI(false);
+      }
+      videoEl.currentTime = parseFloat(val);
+    }
+
+    function changePlaybackSpeed(rate) {
+      videoEl.playbackRate = parseFloat(rate);
+    }
+
+    function updateTimeUI() {
+      document.getElementById('videoScrubber').value = videoEl.currentTime;
+      document.getElementById('currentTimeLabel').textContent = formatTime(videoEl.currentTime);
+      document.getElementById('hudTime').textContent = videoEl.currentTime.toFixed(2) + 's';
+    }
+
+    async function processVideoLoop() {
+      if (mode !== 'video' || videoEl.paused || videoEl.ended) return;
+      updateTimeUI();
+      await processSingleFrame();
+      animationFrameId = requestAnimationFrame(processVideoLoop);
+    }
+
+    async function processSingleFrame() {
+      if (!isModelReady || videoEl.readyState < 2) return;
+      await pose.send({ image: videoEl });
+    }
+
+    async function startCamera(facingMode) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Tu navegador bloqueó el acceso a la cámara porque abriste el archivo de forma local (file://). Súbelo a GitHub Pages o Netlify Drop (HTTPS) para activar las cámaras en vivo.');
+        return;
+      }
+
+      stopCamera();
+      await initPoseModel();
+
+      try {
+        // Primer intento con preferencia de cámara frontal/trasera y resolución HD flexible
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      } catch (firstErr) {
+        try {
+          // Respaldo universal para webcams de PC o dispositivos que no distinguen facingMode
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        } catch (err) {
+          alert('No se pudo abrir la cámara.\n\nCausas comunes:\n1. Abriste el HTML directo desde tu carpeta (file://) en vez de un link HTTPS.\n2. Denegaste el permiso de cámara en el candado de la barra de direcciones.\n3. Otra aplicación (Zoom, Teams, etc.) está usando la cámara.');
+          console.error(err);
+          return;
+        }
+      }
+
+      try {
+
+        mode = 'camera';
+        videoEl.src = '';
+        videoEl.srcObject = cameraStream;
+        await videoEl.play();
+
+        canvasEl.width = videoEl.videoWidth || 1280;
+        canvasEl.height = videoEl.videoHeight || 720;
+
+        document.getElementById('emptyStateOverlay').classList.add('hidden');
+        document.getElementById('hudOverlay').classList.remove('hidden');
+        document.getElementById('videoPlaybackControls').classList.add('hidden');
+        document.getElementById('recordingControls').classList.remove('hidden');
+        document.getElementById('recordingControls').classList.add('flex');
+
+        resetMetrics();
+        processCameraLoop();
+      } catch (playErr) {
+        alert('Error al iniciar la reproducción de la cámara: ' + playErr.message);
+        console.error(playErr);
+      }
+    }
+
+    async function processCameraLoop() {
+      if (mode !== 'camera') return;
+      if (videoEl.readyState >= 2) {
+        document.getElementById('hudTime').textContent = (performance.now() / 1000).toFixed(1) + 's';
+        await pose.send({ image: videoEl });
+      }
+      animationFrameId = requestAnimationFrame(processCameraLoop);
+    }
+
+    function toggleRecording() {
+      if (!cameraStream) return;
+      if (!isRecording) {
+        recordedChunks = [];
+        const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? { mimeType: 'video/webm;codecs=vp9' }
+          : { mimeType: 'video/webm' };
+
+        mediaRecorder = new MediaRecorder(cameraStream, options);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          stopCamera();
+          mode = 'video';
+          videoEl.srcObject = null;
+          videoEl.src = url;
+          document.getElementById('emptyStateOverlay').classList.add('hidden');
+          document.getElementById('hudOverlay').classList.remove('hidden');
+          document.getElementById('videoPlaybackControls').classList.remove('hidden');
+          videoEl.onloadedmetadata = () => {
+            document.getElementById('videoScrubber').max = videoEl.duration;
+            document.getElementById('durationLabel').textContent = formatTime(videoEl.duration);
+            videoEl.currentTime = 0;
+          };
+          videoEl.onseeked = async () => {
+            updateTimeUI();
+            await processSingleFrame();
+          };
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('recDot').classList.add('pulse-rec');
+        document.getElementById('recText').textContent = 'Detener y Analizar';
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        document.getElementById('recDot').classList.remove('pulse-rec');
+        document.getElementById('recText').textContent = 'Grabar Sesión';
+      }
+    }
+
+    function stopCamera() {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      if (mode === 'camera') {
+        mode = 'idle';
+        document.getElementById('recordingControls').classList.add('hidden');
+      }
+    }
+
+    function onPoseResults(results) {
+      frameCounter++;
+      document.getElementById('hudFrameNum').textContent = frameCounter;
+
+      ctx.save();
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+
+      if (!results.poseLandmarks) {
+        ctx.restore();
+        return;
+      }
+
+      if (!smoothedLandmarks) {
+        smoothedLandmarks = results.poseLandmarks.map(lm => ({ ...lm }));
+      } else {
+        for (let i = 0; i < results.poseLandmarks.length; i++) {
+          smoothedLandmarks[i].x = SMOOTHING_ALPHA * results.poseLandmarks[i].x + (1 - SMOOTHING_ALPHA) * smoothedLandmarks[i].x;
+          smoothedLandmarks[i].y = SMOOTHING_ALPHA * results.poseLandmarks[i].y + (1 - SMOOTHING_ALPHA) * smoothedLandmarks[i].y;
+          smoothedLandmarks[i].z = SMOOTHING_ALPHA * results.poseLandmarks[i].z + (1 - SMOOTHING_ALPHA) * smoothedLandmarks[i].z;
+          smoothedLandmarks[i].visibility = results.poseLandmarks[i].visibility;
+        }
+      }
+
+      const lm = smoothedLandmarks;
+
+      const shoulderDiffX = Math.abs(lm[11].x - lm[12].x);
+      if (shoulderDiffX > 0.14) {
+        document.getElementById('sagittalWarning').classList.remove('hidden');
+      } else {
+        document.getElementById('sagittalWarning').classList.add('hidden');
+      }
+
+      const idx = evaluatedSide === 'right'
+        ? { shoulder: 12, hip: 24, knee: 26, ankle: 28, heel: 30, foot: 32 }
+        : { shoulder: 11, hip: 23, knee: 25, ankle: 27, heel: 29, foot: 31 };
+
+      const pShoulder = toPixel(lm[idx.shoulder]);
+      const pHip      = toPixel(lm[idx.hip]);
+      const pKnee     = toPixel(lm[idx.knee]);
+      const pAnkle    = toPixel(lm[idx.ankle]);
+      const pHeel     = toPixel(lm[idx.heel]);
+      const pFoot     = toPixel(lm[idx.foot]);
+
+      const facingDir = (pFoot.x - pHeel.x) >= 0 ? 1 : -1;
+
+      const vTrunk = { x: pHip.x - pShoulder.x, y: pHip.y - pShoulder.y };
+      const vThigh = { x: pKnee.x - pHip.x, y: pKnee.y - pHip.y };
+      const rawHipAngle = angleBetweenVectors(vTrunk, vThigh);
+      const crossHip = vTrunk.x * vThigh.y - vTrunk.y * vThigh.x;
+      const hipSign = (facingDir === 1) ? (crossHip < 0 ? 1 : -1) : (crossHip > 0 ? 1 : -1);
+      const hipAngle = Math.round(rawHipAngle * hipSign);
+
+      const vThighUp = { x: pHip.x - pKnee.x, y: pHip.y - pKnee.y };
+      const vShank   = { x: pAnkle.x - pKnee.x, y: pAnkle.y - pKnee.y };
+      const innerKnee = angleBetweenVectors(vThighUp, vShank);
+      const kneeAngle = Math.max(0, Math.round(180 - innerKnee));
+
+      const vLegUp = { x: pKnee.x - pAnkle.x, y: pKnee.y - pAnkle.y };
+      const vFoot  = { x: pFoot.x - pHeel.x, y: pFoot.y - pHeel.y };
+      const footLegAngle = angleBetweenVectors(vLegUp, vFoot);
+      const ankleAngle = Math.round(90 - footLegAngle);
+
+      drawBiomechanicalOverlay(pShoulder, pHip, pKnee, pAnkle, pHeel, pFoot, hipAngle, kneeAngle, ankleAngle);
+      updateClinicalDashboard(hipAngle, kneeAngle, ankleAngle);
+
+      ctx.restore();
+    }
+
+    function drawBiomechanicalOverlay(shoulder, hip, knee, ankle, heel, foot, hipDeg, kneeDeg, ankleDeg) {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      drawSegment(shoulder, hip, '#38bdf8', 4);
+      drawSegment(hip, knee, '#2dd4bf', 5);
+      drawSegment(knee, ankle, '#fbbf24', 5);
+      drawSegment(ankle, heel, '#f43f5e', 3.5);
+      drawSegment(heel, foot, '#c084fc', 4);
+      drawSegment(ankle, foot, 'rgba(192, 132, 252, 0.45)', 2);
+
+      drawJoint(shoulder, '#38bdf8', 'Acromion');
+      drawJoint(hip, '#2dd4bf', `Cadera ${hipDeg > 0 ? '+' : ''}${hipDeg}°`);
+      drawJoint(knee, '#fbbf24', `Rodilla ${kneeDeg}°`);
+      drawJoint(ankle, '#f43f5e', `Tobillo ${ankleDeg > 0 ? '+' : ''}${ankleDeg}°`);
+      drawJoint(heel, '#c084fc', '');
+      drawJoint(foot, '#c084fc', '');
+    }
+
+    function drawSegment(p1, p2, color, width) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+
+    function drawJoint(pt, color, label) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#0f172a';
+      ctx.stroke();
+
+      if (label) {
+        ctx.font = 'bold 13px Inter, sans-serif';
+        const textWidth = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.fillRect(pt.x + 10, pt.y - 18, textWidth + 10, 22);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(label, pt.x + 15, pt.y - 3);
+      }
+    }
+
+    function updateClinicalDashboard(hip, knee, ankle) {
+      document.getElementById('valHip').textContent = `${hip > 0 ? '+' : ''}${hip}°`;
+      document.getElementById('phaseHip').textContent = hip >= 0 ? 'Flexión' : 'Extensión';
+
+      document.getElementById('valKnee').textContent = `${knee}°`;
+      document.getElementById('phaseKnee').textContent = knee <= 5 ? 'Extensión Completa' : 'Flexión';
+
+      document.getElementById('valAnkle').textContent = `${ankle > 0 ? '+' : ''}${ankle}°`;
+      document.getElementById('phaseAnkle').textContent = ankle >= 0 ? 'Dorsiflexión' : 'Plantiflexión';
+
+      if (sessionStats.hipMaxFlex === null || hip > sessionStats.hipMaxFlex) sessionStats.hipMaxFlex = hip;
+      if (sessionStats.hipMaxExt === null || hip < sessionStats.hipMaxExt) sessionStats.hipMaxExt = hip;
+
+      if (sessionStats.kneeMaxFlex === null || knee > sessionStats.kneeMaxFlex) sessionStats.kneeMaxFlex = knee;
+      if (sessionStats.kneeMinExt === null || knee < sessionStats.kneeMinExt) sessionStats.kneeMinExt = knee;
+
+      if (sessionStats.ankleMaxDorsi === null || ankle > sessionStats.ankleMaxDorsi) sessionStats.ankleMaxDorsi = ankle;
+      if (sessionStats.ankleMaxPlantar === null || ankle < sessionStats.ankleMaxPlantar) sessionStats.ankleMaxPlantar = ankle;
+
+      document.getElementById('maxHipFlex').textContent = `${sessionStats.hipMaxFlex}°`;
+      document.getElementById('maxHipExt').textContent = `${Math.abs(Math.min(0, sessionStats.hipMaxExt))}°`;
+      document.getElementById('maxKneeFlex').textContent = `${sessionStats.kneeMaxFlex}°`;
+      document.getElementById('minKneeExt').textContent = `${sessionStats.kneeMinExt}°`;
+      document.getElementById('maxAnkleDorsi').textContent = `${sessionStats.ankleMaxDorsi}°`;
+      document.getElementById('maxAnklePlantar').textContent = `${Math.abs(Math.min(0, sessionStats.ankleMaxPlantar))}°`;
+
+      const hipStatus = (hip >= -25 && hip <= 65) ? 'green' : (hip < -25 || hip > 80) ? 'red' : 'yellow';
+      const kneeStatus = (knee >= 0 && knee <= 70) ? 'green' : (knee > 85) ? 'yellow' : 'green';
+      const ankleStatus = (ankle >= -22 && ankle <= 20) ? 'green' : (ankle < -28 || ankle > 28) ? 'red' : 'yellow';
+
+      const hipExtAchieved = Math.abs(Math.min(0, sessionStats.hipMaxExt));
+      const anklePlantarAchieved = Math.abs(Math.min(0, sessionStats.ankleMaxPlantar));
+
+      let deficitsCount = 0;
+      let warningsCount = 0;
+
+      if (sessionStats.kneeMaxFlex < 45 || sessionStats.kneeMinExt > 12) deficitsCount++;
+      else if (sessionStats.kneeMaxFlex < 58 || sessionStats.kneeMinExt > 6) warningsCount++;
+
+      if (sessionStats.hipMaxFlex < 20 || hipExtAchieved < 3) deficitsCount++;
+      else if (sessionStats.hipMaxFlex < 28 || hipExtAchieved < 8) warningsCount++;
+
+      if (sessionStats.ankleMaxDorsi < 3 || anklePlantarAchieved < 10) deficitsCount++;
+      else if (sessionStats.ankleMaxDorsi < 8 || anklePlantarAchieved < 18) warningsCount++;
+
+      let globalColor = 'green';
+      let statusMessage = 'Rango articular funcional dentro de parámetros esperados para el ciclo de marcha.';
+
+      if (deficitsCount > 0) {
+        globalColor = 'red';
+        statusMessage = 'Alerta roja: déficit angular significativo detectado en al menos una articulación clave.';
+      } else if (warningsCount > 0) {
+        globalColor = 'yellow';
+        statusMessage = 'Alerta preventiva: recorrido articular en rango límite; revisar posibles compensaciones.';
+      }
+
+      updateTrafficLights(globalColor, statusMessage, hipStatus, kneeStatus, ankleStatus);
+
+      sessionStats.history.push({
+        frame: frameCounter,
+        time: mode === 'video' ? videoEl.currentTime.toFixed(2) : (performance.now() / 1000).toFixed(2),
+        hip,
+        knee,
+        ankle,
+        status: globalColor.toUpperCase()
+      });
+
+      if (frameCounter % 10 === 0 || mode === 'video') {
+        generateReviewAlerts();
+      }
+    }
+
+    function updateTrafficLights(globalColor, message, hipSt, kneeSt, ankleSt) {
+      const redEl = document.getElementById('lightRed');
+      const yellowEl = document.getElementById('lightYellow');
+      const greenEl = document.getElementById('lightGreen');
+      const hudBadge = document.getElementById('hudTrafficLightBadge');
+
+      redEl.className = 'w-4 h-4 rounded-full transition-all duration-200 ' + (globalColor === 'red' ? 'bg-rose-500 shadow-[0_0_12px_#f43f5e]' : 'bg-rose-950 border border-rose-800');
+      yellowEl.className = 'w-4 h-4 rounded-full transition-all duration-200 ' + (globalColor === 'yellow' ? 'bg-amber-400 shadow-[0_0_12px_#fbbf24]' : 'bg-amber-950 border border-amber-800');
+      greenEl.className = 'w-4 h-4 rounded-full transition-all duration-200 ' + (globalColor === 'green' ? 'bg-emerald-400 shadow-[0_0_12px_#34d399]' : 'bg-emerald-950 border border-emerald-800');
+
+      document.getElementById('trafficStatusText').textContent = message;
+
+      if (globalColor === 'green') {
+        hudBadge.className = 'px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg border bg-emerald-950/90 border-emerald-500/50 text-emerald-300';
+        hudBadge.textContent = '● Rango Funcional Óptimo';
+      } else if (globalColor === 'yellow') {
+        hudBadge.className = 'px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg border bg-amber-950/90 border-amber-500/50 text-amber-300';
+        hudBadge.textContent = '▲ Alerta: Rango Límite';
+      } else {
+        hudBadge.className = 'px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide shadow-lg border bg-rose-950/90 border-rose-500/50 text-rose-300';
+        hudBadge.textContent = '■ Alerta: Déficit Funcional';
+      }
+
+      setJointBadge('Hip', hipSt);
+      setJointBadge('Knee', kneeSt);
+      setJointBadge('Ankle', ankleSt);
+    }
+
+    function setJointBadge(joint, status) {
+      const dot = document.getElementById(`dot${joint}`);
+      const badge = document.getElementById(`badge${joint}`);
+      if (status === 'green') {
+        dot.className = 'w-3 h-3 rounded-full bg-emerald-400';
+        badge.className = 'px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+        badge.textContent = 'Óptimo';
+      } else if (status === 'yellow') {
+        dot.className = 'w-3 h-3 rounded-full bg-amber-400';
+        badge.className = 'px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        badge.textContent = 'Revisar';
+      } else {
+        dot.className = 'w-3 h-3 rounded-full bg-rose-500';
+        badge.className = 'px-2 py-0.5 text-[11px] font-bold rounded bg-rose-500/15 text-rose-300 border border-rose-500/30';
+        badge.textContent = 'Alerta';
+      }
+    }
+
+    // =========================================================================
+    // ALERTAS DE REVISIÓN BIOMECÁNICA (SIN DIAGNÓSTICOS, SOLO FOCOS DE EXPLORACIÓN)
+    // =========================================================================
+    function generateReviewAlerts() {
+      const listEl = document.getElementById('clinicalAlertsList');
+      const alerts = [];
+
+      const hipExt = Math.abs(Math.min(0, sessionStats.hipMaxExt ?? 0));
+      const anklePlantar = Math.abs(Math.min(0, sessionStats.ankleMaxPlantar ?? 0));
+
+      if ((sessionStats.kneeMinExt ?? 0) > 6) {
+        alerts.push({
+          level: 'ALERTA EN RODILLA (EXTENSIÓN)',
+          title: `Extensión terminal incompleta (${sessionStats.kneeMinExt}° vs ref. ≤5°)`,
+          reviewFocus: 'Revisar en evaluación física: longitud y extensibilidad de isquiotibiales y gastrocnemios, juego articular/cápsula posterior de rodilla, o posible inhibición motora del cuádriceps.'
+        });
+      }
+
+      if ((sessionStats.kneeMaxFlex ?? 60) < 55) {
+        alerts.push({
+          level: 'ALERTA EN RODILLA (FLEXIÓN)',
+          title: `Excursión de flexión reducida en balanceo (${sessionStats.kneeMaxFlex}° vs ref. ≥60°)`,
+          reviewFocus: 'Revisar en evaluación física: movilidad de la cápsula anterior y rótula, tensión del recto femoral o conductas de protección frente a molestia articular.'
+        });
+      }
+
+      if (hipExt < 8) {
+        alerts.push({
+          level: 'ALERTA EN CADERA (EXTENSIÓN)',
+          title: `Extensión de cadera limitada en despegue (${hipExt}° vs ref. ≥10°)`,
+          reviewFocus: 'Revisar en evaluación física: acortamiento de flexores de cadera (iliopsoas / recto femoral), rigidez capsular anterior o reclutamiento de extensores (glúteo mayor).'
+        });
+      }
+
+      if ((sessionStats.ankleMaxDorsi ?? 10) < 8) {
+        alerts.push({
+          level: 'ALERTA EN TOBILLO (DORSIFLEXIÓN)',
+          title: `Dorsiflexión restringida (${sessionStats.ankleMaxDorsi}° vs ref. ≥10°)`,
+          reviewFocus: 'Revisar en evaluación física: extensibilidad del tríceps sural (sóleo y gastrocnemios), deslizamiento posterior del astrágalo o activación y control neuromuscular de dorsiflexores (tibial anterior).'
+        });
+      }
+
+      if (anklePlantar < 18) {
+        alerts.push({
+          level: 'ALERTA EN TOBILLO (PLANTIFLEXIÓN)',
+          title: `Menor amplitud de plantiflexión en propulsión (${anklePlantar}° vs ref. ≥20°)`,
+          reviewFocus: 'Revisar en evaluación física: fuerza/resistencia del tríceps sural, movilidad articular anterior de tobillo o indemnidad del control motor distal.'
+        });
+      }
+
+      sessionStats.alerts = alerts;
+
+      if (alerts.length === 0) {
+        listEl.innerHTML = `
+          <div class="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-200">
+            <div class="font-bold mb-1">✓ Sin alertas angulares críticas</div>
+            <p class="text-[11px] text-emerald-300/80">Los rangos registrados en cadera, rodilla y tobillo se mantienen dentro de los umbrales funcionales esperados.</p>
+          </div>
+        `;
+      } else {
+        listEl.innerHTML = alerts.map(al => `
+          <div class="p-3 rounded-xl bg-slate-950/90 border border-amber-500/30 hover:border-amber-400/60 transition">
+            <div class="text-[10px] font-extrabold tracking-wider text-amber-400 uppercase mb-0.5">⚠️ ${al.level}</div>
+            <div class="font-bold text-slate-100 mb-1">${al.title}</div>
+            <p class="text-[11px] text-slate-300 leading-relaxed">${al.reviewFocus}</p>
+          </div>
+        `).join('');
+      }
+    }
+
+    function toPixel(landmark) {
+      return {
+        x: landmark.x * canvasEl.width,
+        y: landmark.y * canvasEl.height
+      };
+    }
+
+    function angleBetweenVectors(v1, v2) {
+      const dot = v1.x * v2.x + v1.y * v2.y;
+      const mag1 = Math.hypot(v1.x, v1.y);
+      const mag2 = Math.hypot(v2.x, v2.y);
+      if (mag1 === 0 || mag2 === 0) return 0;
+      const cosTheta = Math.min(1, Math.max(-1, dot / (mag1 * mag2)));
+      return (Math.acos(cosTheta) * 180) / Math.PI;
+    }
+
+    function formatTime(sec) {
+      if (!isFinite(sec)) return '00:00';
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function resetMetrics() {
+      frameCounter = 0;
+      smoothedLandmarks = null;
+      sessionStats = {
+        hipMaxFlex: null,
+        hipMaxExt: null,
+        kneeMaxFlex: null,
+        kneeMinExt: null,
+        ankleMaxDorsi: null,
+        ankleMaxPlantar: null,
+        history: [],
+        alerts: []
+      };
+      ['maxHipFlex', 'maxHipExt', 'maxKneeFlex', 'minKneeExt', 'maxAnkleDorsi', 'maxAnklePlantar'].forEach(id => {
+        document.getElementById(id).textContent = '--°';
+      });
+    }
+
+    function openReportModal() {
+      document.getElementById('reportSideLabel').textContent = evaluatedSide === 'right' ? 'Derecho' : 'Izquierdo';
+      const hipExt = sessionStats.hipMaxExt !== null ? Math.abs(Math.min(0, sessionStats.hipMaxExt)) : '--';
+      const anklePlantar = sessionStats.ankleMaxPlantar !== null ? Math.abs(Math.min(0, sessionStats.ankleMaxPlantar)) : '--';
+
+      document.getElementById('reportContent').innerHTML = `
+        <div class="grid grid-cols-3 gap-2">
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div class="text-slate-400 mb-1">Cadera (Máx Flex / Ext)</div>
+            <div class="text-base font-bold font-mono-num text-white">${sessionStats.hipMaxFlex ?? '--'}° / ${hipExt}°</div>
+          </div>
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div class="text-slate-400 mb-1">Rodilla (Máx Flex / Ext)</div>
+            <div class="text-base font-bold font-mono-num text-white">${sessionStats.kneeMaxFlex ?? '--'}° / ${sessionStats.kneeMinExt ?? '--'}°</div>
+          </div>
+          <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+            <div class="text-slate-400 mb-1">Tobillo (Dorsi / Planti)</div>
+            <div class="text-base font-bold font-mono-num text-white">${sessionStats.ankleMaxDorsi ?? '--'}° / ${anklePlantar}°</div>
+          </div>
+        </div>
+        <div>
+          <h4 class="font-bold text-amber-300 uppercase tracking-wider mb-2">Alertas de Revisión para Exploración Kinésica</h4>
+          <div class="space-y-2">${document.getElementById('clinicalAlertsList').innerHTML}</div>
+        </div>
+      `;
+      document.getElementById('reportModal').classList.remove('hidden');
+    }
+
+    function closeReportModal() {
+      document.getElementById('reportModal').classList.add('hidden');
+    }
+
+    function openShareQR() {
+      const currentUrl = window.location.href;
+      document.getElementById('shareUrlInput').value = currentUrl;
+      document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(currentUrl)}`;
+      document.getElementById('qrModal').classList.remove('hidden');
+    }
+
+    function copyShareLink() {
+      const input = document.getElementById('shareUrlInput');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('Enlace copiado al portapapeles');
+    }
+
+    // =========================================================================
+    // EXPORTACIÓN DE INFORME CLÍNICO EN PDF (CON ALERTAS DE REVISIÓN)
+    // =========================================================================
+    function exportPDF() {
+      if (sessionStats.history.length === 0) {
+        alert('Aún no hay datos evaluados. Analiza un video o captura movimientos antes de generar el informe PDF.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      const sideLabel = evaluatedSide === 'right' ? 'Derecho' : 'Izquierdo';
+      const patientId = document.getElementById('patientIdInput')?.value.trim() || 'No especificado';
+      const evaluatorName = document.getElementById('evaluatorNameInput')?.value.trim() || 'Kinesiólogo Evaluador';
+      const dateStr = new Date().toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+      // Encabezado Institucional Kineroom
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 210, 32, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.text('KINEROOM', 14, 14);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(94, 234, 212);
+      doc.text('INFORME DE TAMIZAJE CINEMÁTICO DE TREN INFERIOR (PLANO SAGITAL)', 14, 21);
+      doc.setTextColor(203, 213, 225);
+      doc.setFontSize(8.5);
+      doc.text(`Fecha: ${dateStr}  |  Fotogramas analizados: ${sessionStats.history.length}`, 14, 27);
+
+      // Datos de la Sesión
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('1. DATOS GENERALES DE LA EVALUACIÓN', 14, 42);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.text(`• Identificador Usuario / Paciente: ${patientId}`, 16, 49);
+      doc.text(`• Profesional Evaluador: ${evaluatorName}`, 16, 55);
+      doc.text(`• Hemicuerpo Evaluado: ${sideLabel}`, 16, 61);
+      doc.text(`• Puntos Anatómicos Rastreados: Acromion, Trocánter Mayor (Cadera), Cóndilo Lateral, Maléolo Lateral, Calcáneo y 5° MTT`, 16, 67);
+
+      // Tabla de Resultados Cinemáticos
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('2. RESULTADOS ANGULARES REGISTRADOS (RANGO ACTIVO EN MARCHA)', 14, 78);
+
+      const hipExt = sessionStats.hipMaxExt !== null ? Math.abs(Math.min(0, sessionStats.hipMaxExt)) : 0;
+      const anklePlantar = sessionStats.ankleMaxPlantar !== null ? Math.abs(Math.min(0, sessionStats.ankleMaxPlantar)) : 0;
+
+      doc.autoTable({
+        startY: 82,
+        head: [['Articulación', 'Movimiento Evaluado', 'Valor Registrado', 'Referencia Funcional', 'Estado']],
+        body: [
+          ['Cadera', 'Flexión Máxima', `${sessionStats.hipMaxFlex ?? '--'}°`, '≥ 30°', (sessionStats.hipMaxFlex >= 28) ? 'Dentro de rango' : 'Alerta: Revisar'],
+          ['Cadera', 'Extensión Máxima', `${hipExt}°`, '≥ 10°', (hipExt >= 8) ? 'Dentro de rango' : 'Alerta: Revisar'],
+          ['Rodilla', 'Flexión Máxima (Balanceo)', `${sessionStats.kneeMaxFlex ?? '--'}°`, '≥ 60°', (sessionStats.kneeMaxFlex >= 55) ? 'Dentro de rango' : 'Alerta: Revisar'],
+          ['Rodilla', 'Extensión Terminal (Apoyo)', `${sessionStats.kneeMinExt ?? '--'}°`, '≤ 5° (0° neutro)', (sessionStats.kneeMinExt <= 6) ? 'Dentro de rango' : 'Alerta: Revisar'],
+          ['Tobillo', 'Dorsiflexión Máxima', `${sessionStats.ankleMaxDorsi ?? '--'}°`, '≥ 10°', (sessionStats.ankleMaxDorsi >= 8) ? 'Dentro de rango' : 'Alerta: Revisar'],
+          ['Tobillo', 'Plantiflexión Máxima', `${anklePlantar}°`, '≥ 20°', (anklePlantar >= 18) ? 'Dentro de rango' : 'Alerta: Revisar']
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [241, 245, 249] }
+      });
+
+      // Sección 3: Alertas de Revisión (Sin Diagnóstico)
+      let currentY = doc.lastAutoTable.finalY + 12;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      doc.text('3. ALERTAS DE REVISIÓN BIOMECÁNICA (FOCOS DE EXPLORACIÓN KINÉSICA)', 14, currentY);
+      currentY += 6;
+
+      if (sessionStats.alerts.length === 0) {
+        doc.setFillColor(236, 253, 245);
+        doc.setDrawColor(16, 185, 129);
+        doc.roundedRect(14, currentY, 182, 16, 2, 2, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(6, 95, 70);
+        doc.text('Sin alertas angulares críticas detectadas en el ciclo evaluado.', 18, currentY + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.text('La excursión articular de cadera, rodilla y tobillo se mantiene dentro de los parámetros funcionales esperados.', 18, currentY + 12);
+        currentY += 22;
+      } else {
+        sessionStats.alerts.forEach((al) => {
+          if (currentY > 255) {
+            doc.addPage();
+            currentY = 20;
+          }
+          const splitText = doc.splitTextToSize(al.reviewFocus, 174);
+          const boxHeight = 14 + splitText.length * 4.2;
+
+          doc.setFillColor(255, 251, 235);
+          doc.setDrawColor(245, 158, 11);
+          doc.roundedRect(14, currentY, 182, boxHeight, 2, 2, 'FD');
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(180, 83, 9);
+          doc.text(`ALERTA — ${al.level}: ${al.title}`, 18, currentY + 6);
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(51, 65, 85);
+          doc.text(splitText, 18, currentY + 11.5);
+
+          currentY += boxHeight + 4;
+        });
+      }
+
+      // Nota Legal / Descargo Clínico al pie
+      if (currentY > 265) {
+        doc.addPage();
+        currentY = 20;
+      }
+      doc.setDrawColor(203, 213, 225);
+      doc.line(14, currentY + 2, 196, currentY + 2);
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      const disclaimer = 'Nota importante: Este reporte generado por Kineroom entrega mediciones cinemáticas objetivas y alertas preventivas para orientar la evaluación física presencial. No constituye un diagnóstico médico ni reemplaza el criterio clínico del kinesiólogo tratante.';
+      const splitDisclaimer = doc.splitTextToSize(disclaimer, 182);
+      doc.text(splitDisclaimer, 14, currentY + 7);
+
+      doc.save(`Kineroom_Informe_${sideLabel}_${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    function exportCSV() {
+      if (sessionStats.history.length === 0) {
+        alert('Aún no hay fotogramas analizados para exportar.');
+        return;
+      }
+
+      const sideLabel = evaluatedSide === 'right' ? 'Derecho' : 'Izquierdo';
+      let csv = `Kineroom - Reporte Cinematico de Tren Inferior\n`;
+      csv += `Hemicuerpo Evaluado,${sideLabel}\n`;
+      csv += `Fotogramas Procesados,${sessionStats.history.length}\n\n`;
+      csv += `Fotograma,Tiempo_Segundos,Cadera_Grados,Rodilla_Grados,Tobillo_Grados,Estado_Semaforo\n`;
+
+      sessionStats.history.forEach(row => {
+        csv += `${row.frame},${row.time},${row.hip},${row.knee},${row.ankle},${row.status}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `kineroom_evaluacion_${evaluatedSide}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
